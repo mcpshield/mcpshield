@@ -1,0 +1,135 @@
+# MCPShield — MCP Supply Chain Security Scan
+# Add this workflow to any repo that uses MCP servers
+# It will scan your MCP config files on every push and PR
+
+name: MCP Security Scan
+
+on:
+  push:
+    paths:
+      - '**/mcp.json'
+      - '**/mcp-config.json'
+      - '**/claude_desktop_config.json'
+      - '**/.cursor/mcp.json'
+      - '**/.vscode/mcp.json'
+  pull_request:
+    paths:
+      - '**/mcp.json'
+      - '**/mcp-config.json'
+      - '**/claude_desktop_config.json'
+      - '**/.cursor/mcp.json'
+      - '**/.vscode/mcp.json'
+  # Also run on schedule to catch new CVEs
+  schedule:
+    - cron: '0 8 * * 1' # Every Monday at 8am UTC
+  # Allow manual runs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  mcp-security-scan:
+    name: MCP Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install MCPShield
+        run: npx mcpshield --help || npm install -g mcpshield
+
+      - name: Discover and scan MCP configs
+        id: scan
+        run: |
+          # Find all MCP config files in the repo
+          configs=$(find . -name "mcp.json" -o -name "mcp-config.json" -o -name "claude_desktop_config.json" | head -10)
+
+          if [ -z "$configs" ]; then
+            echo "No MCP config files found in repository"
+            exit 0
+          fi
+
+          exit_code=0
+          for config in $configs; do
+            echo "Scanning: $config"
+            npx mcpshield scan --config "$config" --json --output "mcpshield-report-$(echo $config | tr '/' '-').json" || exit_code=$?
+          done
+
+          # Also run auto-discovery
+          npx mcpshield scan --json --output mcpshield-report-autodiscovery.json || true
+
+          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+
+      - name: Upload scan reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcpshield-reports
+          path: mcpshield-report-*.json
+          retention-days: 30
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && steps.scan.outputs.exit_code != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const reports = fs.readdirSync('.').filter(f => f.startsWith('mcpshield-report-'));
+            let comment = '## ⛨ MCPShield Security Scan Results\n\n';
+
+            for (const file of reports) {
+              try {
+                const report = JSON.parse(fs.readFileSync(file, 'utf-8'));
+                const s = report.summary;
+                const icon = s.pass ? '✅' : '🛑';
+                comment += `${icon} **${s.servers_scanned} servers scanned** — `;
+                comment += `${s.by_severity.critical} critical, ${s.by_severity.high} high, `;
+                comment += `${s.by_severity.medium} medium findings\n`;
+
+                if (s.typosquats_detected > 0) {
+                  comment += `\n⚠️ **${s.typosquats_detected} typosquat(s) detected!**\n`;
+                }
+
+                if (report.findings.length > 0) {
+                  comment += '\n<details><summary>View findings</summary>\n\n';
+                  for (const f of report.findings.slice(0, 20)) {
+                    const sev = { critical: '🔴', high: '🟠', medium: '🟡', low: '🔵' }[f.severity] || '⚪';
+                    comment += `${sev} **${f.severity.toUpperCase()}**: ${f.title}\n`;
+                    if (f.advice) comment += `  - ${f.advice}\n`;
+                  }
+                  if (report.findings.length > 20) {
+                    comment += `\n...and ${report.findings.length - 20} more findings\n`;
+                  }
+                  comment += '</details>\n';
+                }
+              } catch (e) {}
+            }
+
+            comment += '\n---\n*Scanned by [MCPShield](https://github.com/mcpshield/mcpshield)*';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment,
+            });
+
+      - name: Fail on critical findings
+        if: steps.scan.outputs.exit_code == '2'
+        run: |
+          echo "::error::MCPShield detected critical security findings in MCP configuration"
+          exit 2
+
+      - name: Warn on high findings
+        if: steps.scan.outputs.exit_code == '1'
+        run: |
+          echo "::warning::MCPShield detected high-severity findings in MCP configuration"
+          exit 1

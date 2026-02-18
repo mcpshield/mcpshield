@@ -1,0 +1,16 @@
+{
+  "name": "mcpshield",
+  "version": "0.1.0",
+  "description": "MCP Supply Chain Security Scanner — detect vulnerabilities, typosquats, and misconfigurations in your MCP server configs",
+  "main": "src/index.js",
+  "bin": {
+    "mcpshield": "./src/index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "scan": "node src/index.js scan",
+    "test": "node src/index.js scan --config examples/vulnerable-config.json"
+  },
+  "keywords": ["mcp", "security", "supply-chain", "scanner", "ai-agents"],
+  "license": "MIT"
+}

@@ -1,0 +1,52 @@
+{
+  "mcpServers": {
+    "git": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-git", "--repository", "/home/user/projects"]
+    },
+    "database": {
+      "command": "npx",
+      "args": ["-y", "mcp-server-postgres"],
+      "env": {
+        "DATABASE_URL": "postgres://admin:supersecretpassword@prod-db.company.com:5432/production"
+      }
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "mcp-servr-github"],
+      "env": {
+        "GITHUB_TOKEN": "ghp_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/projects", "~/.ssh", "~/.aws"],
+      "env": {}
+    },
+    "browser": {
+      "command": "npx",
+      "args": ["-y", "mcp-server-browser", "--no-sandbox"]
+    },
+    "slack": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-slack"],
+      "env": {
+        "SLACK_TOKEN": "xoxb-123456789-abcdefghijklmnop"
+      }
+    },
+    "stripe": {
+      "command": "npx",
+      "args": ["-y", "mcp-server-stripe"],
+      "env": {
+        "STRIPE_API_KEY": "$STRIPE_API_KEY"
+      }
+    },
+    "custom-internal": {
+      "command": "node",
+      "args": ["./servers/internal-tools.js"],
+      "env": {
+        "API_ENDPOINT": "http://internal-api.corp.net:8080/v1"
+      }
+    }
+  }
+}
