@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCPShield — MCP Supply Chain Security Scanner</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0c10;
+      --surface: #11141a;
+      --card: #161a22;
+      --border: #2a2e38;
+      --text: #e4e7ec;
+      --muted: #5c6170;
+      --secondary: #8b919e;
+      --accent: #00e5a0;
+      --accent-dim: rgba(0, 229, 160, 0.12);
+      --danger: #ff4d6a;
+      --warning: #ffb224;
+      --blue: #4d9fff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; overflow-x: hidden; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Hero */
+    .hero {
+      min-height: 90vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 80px 24px 60px; position: relative;
+    }
+    .hero::before {
+      content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+      width: 600px; height: 600px; background: radial-gradient(circle, rgba(0,229,160,0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 16px; border-radius: 20px; border: 1px solid var(--border);
+      font-size: 13px; color: var(--secondary); margin-bottom: 28px;
+      background: var(--surface);
+    }
+    .badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+    h1 {
+      font-family: 'JetBrains Mono', monospace; font-size: clamp(40px, 7vw, 72px);
+      font-weight: 800; line-height: 1.05; margin-bottom: 20px; letter-spacing: -0.03em;
+    }
+    h1 .accent { color: var(--accent); }
+    .subtitle {
+      font-size: clamp(16px, 2.5vw, 20px); color: var(--secondary); max-width: 640px;
+      line-height: 1.6; margin-bottom: 40px;
+    }
+    .cta-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 28px; border-radius: 8px; font-size: 15px; font-weight: 600;
+      font-family: 'JetBrains Mono', monospace; cursor: pointer; border: none;
+      transition: transform 0.15s, box-shadow 0.15s; text-decoration: none;
+    }
+    .btn:hover { transform: translateY(-2px); text-decoration: none; }
+    .btn-primary { background: var(--accent); color: var(--bg); box-shadow: 0 4px 24px rgba(0,229,160,0.2); }
+    .btn-primary:hover { box-shadow: 0 8px 32px rgba(0,229,160,0.3); }
+    .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+
+    /* Terminal */
+    .terminal-wrap { max-width: 780px; width: 100%; margin: 48px auto 0; }
+    .terminal {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      overflow: hidden; text-align: left; box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+    .terminal-bar {
+      display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+      background: var(--card); border-bottom: 1px solid var(--border);
+    }
+    .terminal-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .terminal-dot.r { background: #ff5f57; } .terminal-dot.y { background: #febc2e; } .terminal-dot.g { background: #28c840; }
+    .terminal-title { font-size: 12px; color: var(--muted); margin-left: 8px; font-family: 'JetBrains Mono', monospace; }
+    .terminal-body { padding: 20px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; overflow-x: auto; }
+    .t-dim { color: var(--muted); }
+    .t-green { color: var(--accent); }
+    .t-red { color: var(--danger); }
+    .t-yellow { color: var(--warning); }
+    .t-bold { font-weight: 700; }
+    .t-cmd { color: var(--accent); }
+    .t-crit { background: rgba(255,45,85,0.15); color: var(--danger); padding: 1px 6px; border-radius: 3px; font-weight: 700; }
+    .t-blue { color: var(--blue); }
+
+    /* Sections */
+    .section { padding: 100px 24px; max-width: 1100px; margin: 0 auto; }
+    .section-label {
+      font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent);
+      text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px;
+    }
+    .section h2 {
+      font-family: 'JetBrains Mono', monospace; font-size: clamp(28px, 4vw, 40px);
+      font-weight: 800; letter-spacing: -0.02em; margin-bottom: 48px;
+    }
+
+    /* Who is this for */
+    .audience-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin-bottom: 60px; }
+    .audience-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 28px; transition: border-color 0.2s;
+    }
+    .audience-card:hover { border-color: var(--accent); }
+    .audience-icon { font-size: 32px; margin-bottom: 14px; }
+    .audience-card h3 { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .audience-card p { font-size: 14px; color: var(--secondary); line-height: 1.6; }
+
+    /* Explainer */
+    .explainer {
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      padding: 40px; margin-bottom: 60px; max-width: 800px; margin-left: auto; margin-right: auto;
+    }
+    .explainer h3 {
+      font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700;
+      margin-bottom: 16px; color: var(--accent);
+    }
+    .explainer p {
+      font-size: 16px; color: var(--secondary); line-height: 1.8; margin-bottom: 16px;
+    }
+    .explainer p:last-child { margin-bottom: 0; }
+    .explainer strong { color: var(--text); }
+
+    /* Install steps */
+    .install-steps { display: flex; flex-direction: column; gap: 48px; max-width: 800px; margin: 0 auto; }
+    .install-step { position: relative; }
+    .install-step-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+    .install-step-num {
+      font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 800;
+      color: var(--accent); background: var(--accent-dim); width: 44px; height: 44px;
+      border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .install-step h3 { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; }
+    .install-step p { font-size: 15px; color: var(--secondary); line-height: 1.7; margin-bottom: 16px; padding-left: 60px; }
+    .install-step .terminal { margin-left: 60px; margin-bottom: 16px; }
+
+    /* Config paths table */
+    .config-table {
+      margin-left: 60px; width: calc(100% - 60px); border-collapse: collapse;
+      font-size: 13px; margin-bottom: 16px;
+    }
+    .config-table th {
+      text-align: left; padding: 10px 14px; background: var(--card);
+      border: 1px solid var(--border); font-family: 'JetBrains Mono', monospace;
+      color: var(--accent); font-weight: 600;
+    }
+    .config-table td {
+      padding: 10px 14px; border: 1px solid var(--border); color: var(--secondary);
+    }
+    .config-table td code {
+      font-family: 'JetBrains Mono', monospace; font-size: 12px;
+      background: var(--surface); padding: 2px 6px; border-radius: 3px; color: var(--text);
+      word-break: break-all;
+    }
+
+    /* Note box */
+    .note-box {
+      margin-left: 60px; background: rgba(0,229,160,0.05); border: 1px solid rgba(0,229,160,0.2);
+      border-radius: 8px; padding: 16px 20px; font-size: 14px; color: var(--secondary); line-height: 1.6;
+    }
+    .note-box strong { color: var(--accent); }
+
+    /* Features */
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+    .feature-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 28px; transition: border-color 0.2s;
+    }
+    .feature-card:hover { border-color: var(--accent); }
+    .feature-icon { font-size: 28px; margin-bottom: 14px; }
+    .feature-card h3 { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .feature-card p { font-size: 14px; color: var(--secondary); line-height: 1.6; }
+
+    /* Stats */
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 80px; }
+    .stat { text-align: center; padding: 24px; }
+    .stat-num { font-family: 'JetBrains Mono', monospace; font-size: 48px; font-weight: 800; color: var(--accent); }
+    .stat-label { font-size: 14px; color: var(--secondary); margin-top: 4px; }
+
+    /* CTA */
+    .cta-section {
+      text-align: center; padding: 100px 24px; border-top: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--bg) 0%, rgba(0,229,160,0.02) 100%);
+    }
+    .cta-section h2 { font-family: 'JetBrains Mono', monospace; font-size: 36px; font-weight: 800; margin-bottom: 16px; }
+    .cta-section p { color: var(--secondary); font-size: 18px; margin-bottom: 32px; max-width: 500px; margin-left: auto; margin-right: auto; }
+
+    /* Footer */
+    footer {
+      padding: 40px 24px; text-align: center; border-top: 1px solid var(--border);
+      font-size: 13px; color: var(--muted);
+    }
+
+    /* Copy button */
+    .copy-wrap { position: relative; }
+    .copy-btn {
+      position: absolute; top: 12px; right: 12px; background: var(--border); border: none;
+      color: var(--secondary); padding: 4px 10px; border-radius: 4px; font-size: 11px;
+      font-family: 'JetBrains Mono', monospace; cursor: pointer; transition: background 0.2s;
+    }
+    .copy-btn:hover { background: var(--accent); color: var(--bg); }
+    .copy-btn.copied { background: var(--accent); color: var(--bg); }
+
+    @media (max-width: 768px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .install-step p, .install-step .terminal, .config-table, .note-box { margin-left: 0; padding-left: 0; }
+      .config-table { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="badge"><span class="dot"></span> Now in public beta</div>
+  <h1>
+    <span class="accent">⛨</span> MCPShield
+  </h1>
+  <p class="subtitle">
+    Supply chain security for the MCP ecosystem.<br>
+    Detect typosquats, CVEs, hardcoded credentials, and dangerous permissions<br>
+    in your AI agent configurations — before they reach production.
+  </p>
+  <div class="cta-row">
+    <a href="https://github.com/mcpshield/mcpshield" class="btn btn-primary">⭐ Star on GitHub</a>
+    <a href="#who" class="btn btn-secondary">What is this? →</a>
+  </div>
+
+  <div class="terminal-wrap">
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="terminal-dot r"></span><span class="terminal-dot y"></span><span class="terminal-dot g"></span>
+        <span class="terminal-title">mcpshield — zsh</span>
+      </div>
+      <div class="terminal-body">
+        <span class="t-dim">$</span> <span class="t-cmd">npx mcpshield scan --config claude_desktop_config.json</span><br><br>
+        <span class="t-dim">  ⛨  MCPShield v0.1.0</span><br>
+        <span class="t-dim">  MCP Supply Chain Security Scanner</span><br><br>
+        <span class="t-bold">📦 github</span> <span class="t-dim">(mcp-servr-github)</span><br>
+        <span class="t-crit"> 🛑 MALICIOUS PACKAGE DETECTED </span><br>
+        <span class="t-red t-bold">  Typosquat — contains credential-harvesting payload</span><br>
+        <span class="t-dim">  Impersonates: mcp-server-github (distance: 1)</span><br>
+        <span class="t-red t-bold">  ↳ REMOVE THIS SERVER IMMEDIATELY</span><br><br>
+        <span class="t-bold">📦 database</span> <span class="t-dim">(mcp-server-postgres)</span><br>
+        <span class="t-crit"> CRITICAL </span> <span class="t-bold">SQL injection via tool parameter passthrough</span><br>
+        <span class="t-dim">  CVSS: 9.8 — No fix available</span><br>
+        <span class="t-green">  ↳ Implement parameterized queries or add query allow-listing.</span><br><br>
+        <span class="t-crit"> CRITICAL </span> <span class="t-bold">Database credentials detected in config</span><br>
+        <span class="t-dim">  Found at: database.env.DATABASE_URL</span><br>
+        <span class="t-green">  ↳ Use environment variable references ($ENV_VAR)</span><br><br>
+        <span class="t-dim">───────────────────────────────────────</span><br>
+        <span class="t-bold">  Servers scanned:</span>  8<br>
+        <span class="t-bold">  Total findings:</span>   20<br>
+        <span class="t-red">  CRITICAL: 10 &nbsp;HIGH: 9 &nbsp;</span><span class="t-yellow">MEDIUM: 1</span><br>
+        <span class="t-red t-bold">  Exit code: 2 (critical findings)</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Who is this for -->
+<section class="section" id="who">
+  <div class="section-label">Who is this for</div>
+  <h2>Do you use AI agents? You need this.</h2>
+
+  <div class="explainer">
+    <h3>Wait — what's MCP?</h3>
+    <p>
+      <strong>MCP (Model Context Protocol)</strong> is how AI assistants like Claude, Cursor, and VS Code Copilot connect to external tools — your database, GitHub, Slack, file system, browser, and more. If you've ever added an MCP server to your Claude Desktop config or Cursor settings, your AI agent is using MCP.
+    </p>
+    <p>
+      The problem? Anyone can publish an MCP server. There's no review process. Typosquat packages steal your credentials. Known vulnerabilities allow remote code execution. And your config file might have API keys sitting in plaintext — visible to the AI model itself.
+    </p>
+    <p>
+      <strong>MCPShield scans your MCP config file and tells you exactly what's wrong before anything bad happens.</strong>
+    </p>
+  </div>
+
+  <div class="audience-grid">
+    <div class="audience-card">
+      <div class="audience-icon">🧑‍💻</div>
+      <h3>Developers using Claude Desktop</h3>
+      <p>You've added MCP servers to connect Claude to your tools. MCPShield scans your claude_desktop_config.json and catches malicious packages, leaked API keys, and known CVEs.</p>
+    </div>
+    <div class="audience-card">
+      <div class="audience-icon">⌨️</div>
+      <h3>Cursor &amp; VS Code users</h3>
+      <p>Your IDE connects to MCP servers for AI-powered coding. MCPShield finds vulnerabilities in your .cursor/mcp.json or .vscode/mcp.json before they compromise your codebase.</p>
+    </div>
+    <div class="audience-card">
+      <div class="audience-icon">🔒</div>
+      <h3>Security &amp; DevOps teams</h3>
+      <p>Add MCPShield to your CI/CD pipeline. Scan MCP configs on every PR, block deploys with critical findings, and get JSON reports for your security dashboard.</p>
+    </div>
+  </div>
+</section>
+
+<!-- How to use it - detailed -->
+<section class="section" id="install">
+  <div class="section-label">Step-by-step guide</div>
+  <h2>How to use MCPShield</h2>
+
+  <div class="install-steps">
+
+    <!-- Step 0 -->
+    <div class="install-step">
+      <div class="install-step-header">
+        <div class="install-step-num">0</div>
+        <h3>Prerequisites</h3>
+      </div>
+      <p>You need <strong>Node.js</strong> installed on your computer. If you can run <code style="font-family:'JetBrains Mono',monospace;background:var(--surface);padding:2px 8px;border-radius:4px;font-size:13px;color:var(--accent);">node --version</code> in your terminal and see a version number, you're good. If not, install it from <a href="https://nodejs.org" target="_blank">nodejs.org</a> (download the LTS version).</p>
+    </div>
+
+    <!-- Step 1 -->
+    <div class="install-step">
+      <div class="install-step-header">
+        <div class="install-step-num">1</div>
+        <h3>Find your MCP config file</h3>
+      </div>
+      <p>Your MCP config file is where your AI client stores the list of MCP servers you've connected. Here's where to find it:</p>
+
+      <table class="config-table">
+        <tr>
+          <th>Client</th>
+          <th>Config file location</th>
+        </tr>
+        <tr>
+          <td>Claude Desktop (Mac)</td>
+          <td><code>~/Library/Application Support/Claude/claude_desktop_config.json</code></td>
+        </tr>
+        <tr>
+          <td>Claude Desktop (Windows)</td>
+          <td><code>%APPDATA%\Claude\claude_desktop_config.json</code></td>
+        </tr>
+        <tr>
+          <td>Claude Desktop (Linux)</td>
+          <td><code>~/.config/claude/claude_desktop_config.json</code></td>
+        </tr>
+        <tr>
+          <td>Cursor</td>
+          <td><code>~/.cursor/mcp.json</code></td>
+        </tr>
+        <tr>
+          <td>VS Code</td>
+          <td><code>.vscode/mcp.json</code> (in your project)</td>
+        </tr>
+        <tr>
+          <td>Windsurf</td>
+          <td><code>~/.windsurf/mcp.json</code></td>
+        </tr>
+      </table>
+
+      <div class="note-box">
+        <strong>💡 Tip:</strong> Not sure where your config is? Just skip to Step 2 and run MCPShield without the --config flag. It will automatically search all of the above locations and scan any configs it finds.
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="install-step">
+      <div class="install-step-header">
+        <div class="install-step-num">2</div>
+        <h3>Clone and run MCPShield</h3>
+      </div>
+      <p>Open your Terminal (Mac/Linux) or PowerShell (Windows) and run:</p>
+
+      <div class="terminal copy-wrap" style="margin-left:60px;margin-bottom:16px">
+        <div class="terminal-bar">
+          <span class="terminal-dot r"></span><span class="terminal-dot y"></span><span class="terminal-dot g"></span>
+          <span class="terminal-title">Option A — Auto-discover all configs</span>
+        </div>
+        <div class="terminal-body">
+          <span class="t-dim"># Clone the repo</span><br>
+          <span class="t-cmd">git clone https://github.com/mcpshield/mcpshield.git</span><br>
+          <span class="t-cmd">cd mcpshield</span><br><br>
+          <span class="t-dim"># Scan — auto-discovers configs from Claude, Cursor, VS Code, etc.</span><br>
+          <span class="t-cmd">node src/index.js scan</span>
+        </div>
+      </div>
+
+      <div class="terminal copy-wrap" style="margin-left:60px;margin-bottom:16px">
+        <div class="terminal-bar">
+          <span class="terminal-dot r"></span><span class="terminal-dot y"></span><span class="terminal-dot g"></span>
+          <span class="terminal-title">Option B — Scan a specific config file</span>
+        </div>
+        <div class="terminal-body">
+          <span class="t-dim"># Claude Desktop on Mac</span><br>
+          <span class="t-cmd">node src/index.js scan --config ~/Library/Application\ Support/Claude/claude_desktop_config.json</span><br><br>
+          <span class="t-dim"># Cursor</span><br>
+          <span class="t-cmd">node src/index.js scan --config ~/.cursor/mcp.json</span><br><br>
+          <span class="t-dim"># VS Code (from your project directory)</span><br>
+          <span class="t-cmd">node src/index.js scan --config .vscode/mcp.json</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div class="install-step">
+      <div class="install-step-header">
+        <div class="install-step-num">3</div>
+        <h3>Read the results</h3>
+      </div>
+      <p>MCPShield scans every server in your config and reports what it finds. Here's what the severity levels mean:</p>
+
+      <div style="margin-left:60px;display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="background:rgba(255,45,85,0.15);color:var(--danger);padding:4px 12px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;min-width:90px;text-align:center;">CRITICAL</span>
+          <span style="color:var(--secondary);font-size:14px;">Malicious packages, RCE vulnerabilities, exposed database passwords. <strong style="color:var(--danger);">Fix immediately.</strong></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="background:rgba(255,77,106,0.1);color:var(--danger);padding:4px 12px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;min-width:90px;text-align:center;">HIGH</span>
+          <span style="color:var(--secondary);font-size:14px;">Known CVEs, inline API tokens, disabled sandboxes. Fix before production.</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="background:rgba(255,178,36,0.1);color:var(--warning);padding:4px 12px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;min-width:90px;text-align:center;">MEDIUM</span>
+          <span style="color:var(--secondary);font-size:14px;">Unverified publishers, missing authentication, HTTP connections.</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="background:rgba(77,159,255,0.1);color:var(--blue);padding:4px 12px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;min-width:90px;text-align:center;">LOW</span>
+          <span style="color:var(--secondary);font-size:14px;">Single maintainer, missing description. Informational.</span>
+        </div>
+      </div>
+
+      <p>Every finding includes a <span style="color:var(--accent);">green ↳ recommendation</span> telling you exactly how to fix it.</p>
+    </div>
+
+    <!-- Step 4 -->
+    <div class="install-step">
+      <div class="install-step-header">
+        <div class="install-step-num">4</div>
+        <h3>Fix the issues</h3>
+      </div>
+      <p>The most common fixes are:</p>
+      <div style="margin-left:60px;display:flex;flex-direction:column;gap:16px;margin-bottom:16px;">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px 20px;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;margin-bottom:6px;">🛑 Typosquat detected</div>
+          <div style="color:var(--secondary);font-size:14px;">Remove the malicious server from your config and replace it with the legitimate package name. e.g., change <code style="font-family:'JetBrains Mono',monospace;background:rgba(255,45,85,0.1);padding:2px 6px;border-radius:3px;color:var(--danger);">mcp-servr-github</code> to <code style="font-family:'JetBrains Mono',monospace;background:var(--accent-dim);padding:2px 6px;border-radius:3px;color:var(--accent);">mcp-server-github</code></div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px 20px;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;margin-bottom:6px;">🔑 Hardcoded credentials</div>
+          <div style="color:var(--secondary);font-size:14px;">Replace inline secrets with environment variable references. Instead of <code style="font-family:'JetBrains Mono',monospace;background:rgba(255,45,85,0.1);padding:2px 6px;border-radius:3px;color:var(--danger);font-size:12px;">"GITHUB_TOKEN": "ghp_abc123..."</code> use <code style="font-family:'JetBrains Mono',monospace;background:var(--accent-dim);padding:2px 6px;border-radius:3px;color:var(--accent);font-size:12px;">"GITHUB_TOKEN": "$GITHUB_TOKEN"</code> and set it in your shell.</div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px 20px;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;margin-bottom:6px;">⚠️ Known CVE</div>
+          <div style="color:var(--secondary);font-size:14px;">Check if a patch is available (the report tells you). Update the server to the fixed version, or implement the recommended workaround.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5 -->
+    <div class="install-step">
+      <div class="install-step-header">
+        <div class="install-step-num">5</div>
+        <h3>Add to CI/CD (optional)</h3>
+      </div>
+      <p>For teams, add MCPShield to your build pipeline so MCP configs are scanned on every pull request:</p>
+
+      <div class="terminal copy-wrap" style="margin-left:60px;margin-bottom:16px">
+        <div class="terminal-bar">
+          <span class="terminal-dot r"></span><span class="terminal-dot y"></span><span class="terminal-dot g"></span>
+          <span class="terminal-title">CI/CD integration</span>
+        </div>
+        <div class="terminal-body">
+          <span class="t-dim"># Output JSON report for your pipeline</span><br>
+          <span class="t-cmd">node src/index.js scan --config mcp.json --json --output report.json</span><br><br>
+          <span class="t-dim"># Exit codes:</span><br>
+          <span class="t-dim"># 0 = clean (no high/critical findings)</span><br>
+          <span class="t-dim"># 1 = high-severity findings</span><br>
+          <span class="t-dim"># 2 = critical findings (block the deploy!)</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- What it catches -->
+<section class="section">
+  <div class="section-label">What it catches</div>
+  <h2>Six layers of defense</h2>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">🛑</div>
+      <h3>Typosquat Detection</h3>
+      <p>Levenshtein distance analysis against 40+ known legitimate MCP packages. Catches single-character swaps, confusable substitutions, and scope impersonation.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚠️</div>
+      <h3>Known CVE Matching</h3>
+      <p>Every server checked against a vulnerability database of disclosed MCP security issues, including RCE, SQL injection, SSRF, and path traversal.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔑</div>
+      <h3>Credential Scanning</h3>
+      <p>Detects API keys, database URLs, private keys, and tokens hardcoded in your config. Matches 15+ credential patterns across all major providers.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔒</div>
+      <h3>Permission Analysis</h3>
+      <p>Flags dangerous configurations: SSH key access, disabled sandboxes, system directory exposure, elevated privileges, and world-writable permissions.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📡</div>
+      <h3>npm Registry Lookup</h3>
+      <p>Live checks against the npm registry for package existence, download counts, publish age, install scripts, and maintainer signals.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">✓</div>
+      <h3>Publisher Verification</h3>
+      <p>Validates packages come from trusted scopes (@anthropic/, @modelcontextprotocol/) or the verified community package list.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Stats -->
+<section class="section">
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-num">40+</div>
+      <div class="stat-label">Known MCP CVEs tracked</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">13</div>
+      <div class="stat-label">Confirmed malicious packages</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">15</div>
+      <div class="stat-label">Credential patterns detected</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">0</div>
+      <div class="stat-label">Dependencies required</div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <h2>Secure your AI agents today</h2>
+  <p>MCPShield is free, open source, and has zero dependencies. Start scanning in seconds.</p>
+  <div class="cta-row">
+    <a href="https://github.com/mcpshield/mcpshield" class="btn btn-primary">⭐ Star on GitHub</a>
+    <a href="https://github.com/mcpshield/mcpshield/issues" class="btn btn-secondary">Report a vulnerability →</a>
+  </div>
+</section>
+
+<footer>
+  <p>⛨ MCPShield — Open source MCP supply chain security · MIT License</p>
+</footer>
+
+</body>
+</html>
