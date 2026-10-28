@@ -18,15 +18,21 @@ import {
   printTyposquatAlert, printPublisherWarning, printSummary,
   generateJSONReport
 } from './output.js';
-import { writeFileSync } from 'fs';
+import { auditToolList } from './toolScanner.js';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 
 // ─── Parse CLI args ─────────────────────────────────────────────
 function parseArgs(argv) {
   const args = argv.slice(2);
+  const firstArg = args[0] || 'scan';
+  const isCommand = !firstArg.startsWith('-');
+  const command = isCommand ? firstArg : 'scan';
+
   const opts = {
-    command: args[0] || 'scan',
+    command,
     config: null,
+    tools: null,
     json: false,
     output: null,
     verbose: false,
@@ -34,10 +40,13 @@ function parseArgs(argv) {
     network: true,
   };
 
-  for (let i = 0; i < args.length; i++) {
+  const startIndex = isCommand ? 1 : 0;
+  for (let i = startIndex; i < args.length; i++) {
     switch (args[i]) {
       case '--config': case '-c':
         opts.config = args[++i]; break;
+      case '--tools': case '-t':
+        opts.tools = args[++i]; break;
       case '--json': case '-j':
         opts.json = true; break;
       case '--output': case '-o':
@@ -48,6 +57,11 @@ function parseArgs(argv) {
         opts.help = true; break;
       case '--no-network': case '--offline':
         opts.network = false; break;
+      default:
+        if (!args[i].startsWith('-') && !opts.tools && (command === 'audit-tools' || command === 'scan-tools')) {
+          opts.tools = args[i];
+        }
+        break;
     }
   }
 
@@ -61,16 +75,19 @@ ${'\x1b[36m'}${'\x1b[1m'}MCPShield${'\x1b[0m'} — MCP Supply Chain Security Sca
 ${'\x1b[1m'}USAGE${'\x1b[0m'}
   mcpshield scan                            Auto-discover and scan MCP configs
   mcpshield scan --config <path>            Scan a specific config file
+  mcpshield audit-tools <path>              Audit an MCP tool definitions JSON file
   mcpshield scan --json                     Output JSON report
   mcpshield scan --json --output report.json  Save JSON to file
 
 ${'\x1b[1m'}OPTIONS${'\x1b[0m'}
   -c, --config <path>    Path to MCP config file (JSON)
+  -t, --tools <path>     Path to MCP tool definitions file (JSON)
   -j, --json             Output as JSON (for CI/CD pipelines)
   -o, --output <path>    Write JSON report to file
   --no-network           Skip npm registry live lookups (offline mode)
   -v, --verbose          Show additional details
   -h, --help             Show this help message
+
 
 ${'\x1b[1m'}WHAT IT CHECKS${'\x1b[0m'}
   • Typosquat detection       Levenshtein distance + known malicious package DB
@@ -228,6 +245,95 @@ async function main() {
 
   if (!opts.json) {
     printBanner();
+  }
+
+  // Handle MCP tool definition auditing
+  if (opts.command === 'audit-tools' || opts.command === 'scan-tools' || opts.tools) {
+    const targetFile = opts.tools || opts.config;
+    if (!targetFile) {
+      console.error(`\x1b[31mError: Please provide a tools definition JSON file (e.g. mcpshield audit-tools <tools.json> or -t <path>)\x1b[0m`);
+      process.exit(1);
+    }
+
+    const resolvedPath = resolve(targetFile);
+    if (!existsSync(resolvedPath)) {
+      console.error(`\x1b[31mError: Tools file not found: ${resolvedPath}\x1b[0m`);
+      process.exit(1);
+    }
+
+    let raw;
+    try {
+      raw = readFileSync(resolvedPath, 'utf8');
+    } catch (err) {
+      console.error(`\x1b[31mError reading file: ${err.message}\x1b[0m`);
+      process.exit(1);
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (err) {
+      console.error(`\x1b[31mError parsing JSON: ${err.message}\x1b[0m`);
+      process.exit(1);
+    }
+
+    const tools = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.tools) ? parsed.tools : []);
+    if (!opts.json) {
+      printSection(`AUDITING MCP TOOLS: ${targetFile}`);
+      console.log(`  \x1b[2mFound ${tools.length} tool definition(s)\x1b[0m\n`);
+    }
+
+    const { alerts, summary } = auditToolList(tools);
+
+    const findings = alerts.map(a => ({
+      server: `Tool: ${a.toolName}`,
+      package: a.category,
+      type: a.category.toLowerCase(),
+      severity: a.severity.toLowerCase(),
+      title: a.title,
+      detail: a.description + (a.matchedSnippet ? ` [Matched: "${a.matchedSnippet}"]` : ''),
+      advice: a.remediation,
+    }));
+
+    if (!opts.json) {
+      if (findings.length > 0) {
+        findings.forEach((f, i) => printFinding(f, i + 1));
+      } else {
+        console.log(`  ✓ \x1b[32mNo vulnerabilities found in tool definitions.\x1b[0m\n`);
+      }
+    }
+
+    const bySeverity = {
+      critical: summary.critical,
+      high: summary.high,
+      medium: summary.medium,
+      low: 0,
+    };
+
+    const summaryData = {
+      totalServers: summary.totalTools,
+      totalFindings: summary.totalAlerts,
+      bySeverity,
+      typosquats: 0,
+      unverified: 0,
+    };
+
+    if (opts.json) {
+      const report = generateJSONReport(summaryData, findings);
+      report.tools_audited = summary.totalTools;
+      if (opts.output) {
+        writeFileSync(opts.output, JSON.stringify(report, null, 2));
+        console.error(`Report written to ${opts.output}`);
+      } else {
+        console.log(JSON.stringify(report, null, 2));
+      }
+    } else {
+      printSummary(summaryData);
+    }
+
+    if (summary.critical > 0) process.exit(2);
+    if (summary.high > 0) process.exit(1);
+    process.exit(0);
   }
 
   let configs = [];

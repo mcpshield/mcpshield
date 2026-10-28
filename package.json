@@ -9,7 +9,9 @@
   "type": "module",
   "scripts": {
     "scan": "node src/index.js scan",
-    "test": "node src/index.js scan --config examples/vulnerable-config.json"
+    "test": "node --test test/toolScanner.test.js",
+    "test:tools": "node --test test/toolScanner.test.js",
+    "test:clean": "node src/index.js scan --config examples/clean-config.json --offline"
   },
   "keywords": ["mcp", "security", "supply-chain", "scanner", "ai-agents"],
   "license": "MIT"

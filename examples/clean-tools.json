@@ -1,0 +1,27 @@
+[
+  {
+    "name": "weather_lookup",
+    "description": "Fetch current weather conditions and forecasts for a specified city or coordinates.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["city"],
+      "properties": {
+        "city": { "type": "string", "description": "City name or zip code" },
+        "units": { "type": "string", "enum": ["metric", "imperial"], "description": "Measurement units" }
+      }
+    }
+  },
+  {
+    "name": "currency_convert",
+    "description": "Convert currency amounts between international currencies using standard exchange rates.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["amount", "from", "to"],
+      "properties": {
+        "amount": { "type": "number", "description": "Monetary amount to convert" },
+        "from": { "type": "string", "description": "Three-letter source currency code" },
+        "to": { "type": "string", "description": "Three-letter destination currency code" }
+      }
+    }
+  }
+]
